@@ -17,45 +17,52 @@ Adafruit_BMP085_Unified       bmp   = Adafruit_BMP085_Unified(18001);
 RF24 radio(48, 49); // CE, CSN
 
 const byte address[6] = "00001";
-const int trigPin = 6;
-const int echoPin = 5;
+const int trigPin = 11;
+const int echoPin = 12;
+const int flPin = 10;
+const int frPin = 7;
+const int rlPin = 9;
+const int rrPin = 8;
+const int servoPin = 6;
 float seaLevelPressure = SENSORS_PRESSURE_SEALEVELHPA;
 
 Servo FL;
 Servo FR;
 Servo RL;
 Servo RR;
+Servo armController;
 
 void setup() {
-
   Serial.begin(115200);
   radio.begin();
   radio.openReadingPipe(0, address);
   radio.setPALevel(RF24_PA_MIN);
   radio.startListening();
-  FL.attach(9);
-  FR.attach(10);
-  RL.attach(11);
-  RR.attach(12);
+  FL.attach(flPin);
+  FR.attach(frPin);
+  RL.attach(rlPin);
+  RR.attach(rrPin);
+  armController.attach(servoPin);
   initSensors();
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input
+  pinMode(3, OUTPUT);
 }
 
 
-void initSensors(){
-  if(!accel.begin()){
+void initSensors() {
+  if (!accel.begin()) {
     Serial.println(F("Ooops, no LSM303 detected ... Check your wiring!"));
-    while(1);
+    while (1);
   }
-  if(!mag.begin()){
+  if (!mag.begin()) {
     Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
-    while(1);
+    while (1);
   }
-  if(!bmp.begin())
+  if (!bmp.begin())
   {
     Serial.println("Ooops, no BMP180 detected ... Check your wiring!");
-    while(1);
+    while (1);
   }
 }
 
@@ -90,38 +97,38 @@ void pollInfo() {
   if (radio.available()) {
     input = 0;
     radio.read(&input, sizeof(input));
-    
+
     if ((input & 0b1100000000000000) == 0b0000000000000000) {
       throttle = input & 0b0011111110000000;
       throttle = map(throttle, 8192, 16256, 1000, 2000);
     }
     if ((input & 0b1100000000000000) == 0b0100000000000000) {
       buttons = input & 0b0011110000000000;
-      
-      if((input & 0b0010000000000000) == 0b0010000000000000){
+
+      if ((input & 0b0010000000000000) == 0b0010000000000000) {
         button1 = 0;
-      }else{
+      } else {
         button1 = 1;
       }
-      
-      if((input & 0b0001000000000000) == 0b0001000000000000){
+
+      if ((input & 0b0001000000000000) == 0b0001000000000000) {
         button2 = 0;
-      }else{
+      } else {
         button2 = 1;
       }
-      
-      if((input & 0b0000100000000000) == 0b0000100000000000){
+
+      if ((input & 0b0000100000000000) == 0b0000100000000000) {
         button3 = 0;
-      }else{
+      } else {
         button3 = 1;
       }
-      
-      if((input & 0b0000010000000000) == 0b0000010000000000){
+
+      if ((input & 0b0000010000000000) == 0b0000010000000000) {
         button4 = 0;
-      }else{
+      } else {
         button4 = 1;
       }
-      
+
     }
   }
   //sensors
@@ -131,20 +138,20 @@ void pollInfo() {
   sensors_vec_t   orientation;
 
   accel.getEvent(&accel_event);
-  if (dof.accelGetOrientation(&accel_event, &orientation)){
+  if (dof.accelGetOrientation(&accel_event, &orientation)) {
     accelX = accel_event.acceleration.x;
     accelY = accel_event.acceleration.y;
     accelZ = accel_event.acceleration.z;
 
-    roll = orientation.roll;
-    pitch = orientation.pitch;
+    roll = orientation.pitch;
+    pitch = orientation.roll;
   }
   mag.getEvent(&mag_event);
-  if (dof.magGetOrientation(SENSOR_AXIS_Z, &mag_event, &orientation)){
+  if (dof.magGetOrientation(SENSOR_AXIS_Z, &mag_event, &orientation)) {
     heading = orientation.heading;
   }
   bmp.getEvent(&bmp_event);
-  if (bmp_event.pressure){
+  if (bmp_event.pressure) {
     bmp.getTemperature(&temperature);
 
     impliedAltitude = bmp.pressureToAltitude(seaLevelPressure, bmp_event.pressure, temperature);
@@ -157,19 +164,19 @@ void pollInfo() {
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-  absoluteAltitude = pulseIn(echoPin, HIGH)*0.034/0.02;//gets value from sensor, converts to actual altitude
+  absoluteAltitude = pulseIn(echoPin, HIGH) * 0.034 / 2; //gets value from sensor, converts to actual altitude
 
 
 
-  
+
   Serial.println(F(""));
   //delay(1000);
 }
 
-void printReport(){
+void printReport() {
   Serial.print("Raw Input: ");
   Serial.println(input, BIN);
-  
+
   Serial.print("Throttle: ");
   Serial.println(throttle);
 
@@ -183,8 +190,8 @@ void printReport(){
   Serial.println("Acceleration: ");
   Serial.print("X: "); Serial.print(accelX); Serial.print("  ");
   Serial.print("Y: "); Serial.print(accelY); Serial.print("  ");
-  Serial.print("Z: "); Serial.print(accelZ); Serial.print("  ");Serial.println("m/s^2 \n");
-  
+  Serial.print("Z: "); Serial.print(accelZ); Serial.print("  "); Serial.println("m/s^2 \n");
+
   Serial.println("Orientation: ");
   Serial.print(F("Roll: "));
   Serial.print(roll);
@@ -203,26 +210,27 @@ void printReport(){
 
   Serial.print(F("Absolute Altitude (from ultrasonic sensor): "));
   Serial.print(absoluteAltitude);
-  Serial.println(F(" m; \n"));
-    
+  Serial.println(F(" cm; \n"));
+
   Serial.print(F("Temp: "));
   Serial.print(temperature);
   Serial.print(F(" C\n"));
 
-  
-  
+
+
 }
 
-void balanceThrottle(){
+void balanceThrottle() {
   throttleFL = throttle;
   throttleFR = throttle;
   throttleRL = throttle;
   throttleRR = throttle;
+
 }
 
 
-void control(){
-  
+void control() {
+
 }
 
 
@@ -240,5 +248,15 @@ void loop() {
   control();
   sendMotor();
   printReport();
+
+
+
+  if (button4) {
+    armController.write(180);
+    Serial.println("going");
+  } else {
+    armController.write(0);
+    Serial.println("off");
+  }
 
 }
